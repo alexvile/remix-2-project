@@ -1,7 +1,14 @@
 import type { ActionArgs, LoaderArgs } from "@remix-run/node";
 import { json, redirect } from "@remix-run/node";
-import { Form, Link, useActionData, useCatch } from "@remix-run/react";
+import {
+  Form,
+  Link,
+  useActionData,
+  useCatch,
+  useNavigation,
+} from "@remix-run/react";
 
+import { JokeDisplay } from "~/components/joke";
 import { db } from "~/utils/db.server";
 import { badRequest } from "~/utils/request.server";
 import { getUserId, requireUserId } from "~/utils/session.server";
@@ -28,12 +35,9 @@ function validateJokeName(name: string) {
 
 export const action = async ({ request }: ActionArgs) => {
   const userId = await requireUserId(request);
-
   const form = await request.formData();
   const name = form.get("name");
   const content = form.get("content");
-  // we do this type check to be extra sure and to make TypeScript happy
-  // we'll explore validation next!
   if (typeof name !== "string" || typeof content !== "string") {
     return badRequest({
       fieldErrors: null,
@@ -46,7 +50,6 @@ export const action = async ({ request }: ActionArgs) => {
     name: validateJokeName(name),
     content: validateJokeContent(content),
   };
-
   const fields = { name, content };
   if (Object.values(fieldErrors).some(Boolean)) {
     return badRequest({
@@ -55,14 +58,36 @@ export const action = async ({ request }: ActionArgs) => {
       formError: null,
     });
   }
+
   const joke = await db.joke.create({
     data: { ...fields, jokesterId: userId },
   });
   return redirect(`/jokes/${joke.id}`);
 };
 
-export default function NewJoke() {
+export default function NewJokeRoute() {
   const actionData = useActionData<typeof action>();
+  const navigation = useNavigation();
+
+  if (navigation.formData) {
+    const name = navigation.formData.get("name");
+    const content = navigation.formData.get("content");
+    if (
+      typeof name === "string" &&
+      typeof content === "string" &&
+      !validateJokeContent(content) &&
+      !validateJokeName(name)
+    ) {
+      return (
+        <JokeDisplay
+          joke={{ name, content }}
+          isOwner={true}
+          canDelete={false}
+        />
+      );
+    }
+  }
+
   return (
     <div>
       <p>Add your own hilarious joke</p>
@@ -124,6 +149,7 @@ export default function NewJoke() {
     </div>
   );
 }
+
 export function CatchBoundary() {
   const caught = useCatch();
 
